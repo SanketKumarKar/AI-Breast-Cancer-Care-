@@ -22,6 +22,7 @@ IMG_SIZE = (224, 224)
 
 # Global model variable
 model = None
+model_load_error = None
 
 
 # 5 fixed regions (same order expected by frontend)
@@ -562,6 +563,24 @@ def load_ai_model():
     print("Feature-based SHAP-style explainer initialized.")
 
 
+def ensure_model_loaded():
+    global model_load_error
+
+    if model is not None:
+        return True
+
+    if model_load_error is not None:
+        return False
+
+    try:
+        load_ai_model()
+        return True
+    except Exception as exc:
+        model_load_error = str(exc)
+        print(f"Model load error: {model_load_error}")
+        return False
+
+
 def risk_text(probability):
     if probability < 0.35:
         return "Low Risk"
@@ -570,10 +589,22 @@ def risk_text(probability):
     return "High Risk (Immediate Attention Required)"
 
 
+@app.route("/chat", methods=["GET"])
+def chat():
+    return jsonify(
+        {
+            "reply": (
+                "I can help with breast cancer awareness and app guidance. "
+                "For diagnosis or treatment decisions, please consult a licensed clinician."
+            )
+        }
+    )
+
+
 @app.route("/predict", methods=["POST"])
 def predict():
-    if model is None:
-        return jsonify({"error": "Model not loaded"}), 500
+    if not ensure_model_loaded():
+        return jsonify({"error": f"Model not loaded: {model_load_error}"}), 500
 
     if "cc" not in request.files or "mlo" not in request.files:
         return jsonify({"error": "Missing image files. Please upload both CC and MLO views."}), 400
@@ -666,5 +697,8 @@ def predict():
 
 
 if __name__ == "__main__":
-    load_ai_model()
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # Preload model for local runs; production gunicorn path loads lazily.
+    ensure_model_loaded()
+    port = int(os.getenv("PORT", "5000"))
+    debug = os.getenv("FLASK_DEBUG", "0") == "1"
+    app.run(host="0.0.0.0", port=port, debug=debug)

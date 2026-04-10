@@ -154,7 +154,7 @@
         userMsg.innerText = msg;
         chatlog.appendChild(userMsg);
 
-        let res = await fetch("http://localhost:8080/chat");
+        let res = await fetch("/chat");
         let data = await res.json();
 
         let botMsg = document.createElement("div");
