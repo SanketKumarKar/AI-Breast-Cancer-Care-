@@ -542,22 +542,23 @@ def load_ai_model():
 
     print(f"Loading model from {selected_path}...")
 
-    if selected_path == LEGACY_MODEL_PATH:
+    # Always pass custom objects in case the model was renamed
+    try:
         from model_def import ViewConsistencyLayer, BBoxCIoULoss, biou, cxcywh_to_xyxy
-
         custom_objects = {
             "ViewConsistencyLayer": ViewConsistencyLayer,
             "BBoxCIoULoss": BBoxCIoULoss,
             "biou": biou,
             "cxcywh_to_xyxy": cxcywh_to_xyxy,
         }
-        model = tf.keras.models.load_model(
-            selected_path,
-            custom_objects=custom_objects,
-            compile=False,
-        )
-    else:
-        model = tf.keras.models.load_model(selected_path, compile=False)
+    except ImportError:
+        custom_objects = {}
+
+    model = tf.keras.models.load_model(
+        selected_path,
+        custom_objects=custom_objects,
+        compile=False,
+    )
 
     print("Model loaded successfully.")
     print("Feature-based SHAP-style explainer initialized.")
