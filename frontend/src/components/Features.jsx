@@ -6,16 +6,6 @@ const features = [
     title: 'Detection',
     desc: 'AI cancer detection',
   },
-  {
-    icon: '🧬',
-    title: 'Classification',
-    desc: 'Cancer type detection',
-  },
-  {
-    icon: '📊',
-    title: 'Recurrence',
-    desc: 'Recurrence prediction',
-  },
 ];
 
 export default function Features() {

@@ -85,33 +85,40 @@ IMPORTANT: You MUST respond with ONLY valid JSON, no markdown, no code fences. U
   "probability": <number between 0 and 100 representing cancer risk percentage>,
   "riskLevel": "<Low Risk | Moderate Risk | High Risk>",
   "prediction": "<Cancer Signal Detected | No Strong Cancer Signal>",
-  "biradsDensity": "<A: Almost entirely fatty | B: Scattered fibroglandular | C: Heterogeneously dense | D: Extremely dense>",
-  "selectedView": "<CC | MLO>",
-  "analysisBasis": "<2-3 sentence explanation of the main findings>",
-  "findings": [
-    "<finding 1>",
-    "<finding 2>",
-    "<finding 3>"
+  "explanation": "<A detailed 2-4 sentence explanation of WHY this percentage was given. Mention which scan had the strongest warning signs, which area was selected and why, and the key data points like: Selected view, Best area, Selected area score, CC full-image score, MLO full-image score, SHAP-style tabular score.>",
+  "selectedCrop": "<CC | MLO> - <area name, e.g. bottom-left area>",
+  "focusArea": "center <x>%, <y>%, box <w>% × <h>%",
+  "areaScores": [
+    { "name": "top-left area", "score": <number 0-100>, "isSelected": false },
+    { "name": "top-right area", "score": <number 0-100>, "isSelected": false },
+    { "name": "bottom-left area", "score": <number 0-100>, "isSelected": true },
+    { "name": "bottom-right area", "score": <number 0-100>, "isSelected": false },
+    { "name": "center area", "score": <number 0-100>, "isSelected": false }
   ],
-  "areaOfConcern": {
-    "description": "<description of the most concerning area, or 'No specific area of concern'>",
-    "location": "<upper-outer | upper-inner | lower-outer | lower-inner | central | retroareolar | axillary | none>"
-  },
-  "recommendations": [
-    "<recommendation 1>",
-    "<recommendation 2>"
+  "topParameters": [
+    { "name": "<param_name>", "value": <number>, "influence": "<risk | protective>" },
+    ... 9 more parameters
   ],
   "disclaimer": "This AI analysis is for educational and screening assistance only. It does NOT replace a professional medical diagnosis. Please consult a qualified healthcare provider."
 }
 
-Rules for probability scoring:
-- 0-20%: Normal breast tissue, no suspicious findings
-- 20-40%: Minor findings that likely benign, routine follow-up
-- 40-60%: Indeterminate findings, additional imaging recommended
-- 60-80%: Suspicious findings, biopsy may be recommended
-- 80-100%: Highly suspicious findings, immediate medical attention
-
-Be thorough but conservative. When in doubt, recommend follow-up rather than alarming the patient.`;
+Rules for the response:
+- "areaScores" must have exactly 5 entries (top-left, top-right, bottom-left, bottom-right, center). Mark the one with the highest score as "isSelected": true.
+- "topParameters" MUST contain EXACTLY 10 entries chosen from the following 30 breast-tissue characteristics from the Breast Cancer Wisconsin Diagnostic dataset:
+  radius_mean, radius_se, radius_worst
+  texture_mean, texture_se, texture_worst
+  perimeter_mean, perimeter_se, perimeter_worst
+  area_mean, area_se, area_worst
+  smoothness_mean, smoothness_se, smoothness_worst
+  compactness_mean, compactness_se, compactness_worst
+  concavity_mean, concavity_se, concavity_worst
+  concave points_mean, concave points_se, concave points_worst
+  symmetry_mean, symmetry_se, symmetry_worst
+  fractal_dimension_mean, fractal_dimension_se, fractal_dimension_worst
+- The "influence" field in "topParameters" must be either "risk" (pushing prediction toward cancer risk) or "protective" (pushing prediction away from cancer risk).
+- The "explanation" should read like: "The AI checked both scans and found the strongest warning signs in the CC image, mainly in the bottom-left area. The AI checked 5 areas and picked the bottom-left area because it had the highest score (56.10%). The next highest was the top-left area (55.87%), so the selected area was ahead by 0.23%. Key data: Selected view: CC | Best area: Bottom-Left | Selected area score: 56.10% | CC full-image score: 54.60% | MLO full-image score: 54.80% | SHAP-style tabular score: 100.00%"
+- probability: 0-20% = normal, 20-40% = likely benign, 40-60% = indeterminate, 60-80% = suspicious, 80-100% = highly suspicious
+- Be thorough but conservative. When in doubt, recommend follow-up rather than alarming the patient.`;
 
     const result = await withRetry(() => model.generateContent([prompt, ccImage, mloImage]));
     const responseText = result.response.text();
@@ -128,12 +135,28 @@ Be thorough but conservative. When in doubt, recommend follow-up rather than ala
         probability: 15,
         riskLevel: 'Low Risk',
         prediction: 'Analysis Inconclusive',
-        biradsDensity: 'Unable to determine',
-        selectedView: 'CC',
-        analysisBasis: 'The AI was unable to produce a structured analysis. The images may not be standard mammograms or may be unclear.',
-        findings: ['Unable to parse detailed findings from AI response'],
-        areaOfConcern: { description: 'Unable to determine', location: 'none' },
-        recommendations: ['Please consult a radiologist for proper interpretation', 'Ensure high-quality mammogram images are uploaded'],
+        explanation: 'The AI was unable to produce a structured analysis. The images may not be standard mammograms or may be unclear. Please try uploading clearer images.',
+        selectedCrop: 'CC - center area',
+        focusArea: 'center 50.0%, 50.0%, box 50.0% × 50.0%',
+        areaScores: [
+          { name: 'top-left area', score: 50.0, isSelected: false },
+          { name: 'top-right area', score: 50.0, isSelected: false },
+          { name: 'bottom-left area', score: 50.0, isSelected: false },
+          { name: 'bottom-right area', score: 50.0, isSelected: false },
+          { name: 'center area', score: 50.0, isSelected: true },
+        ],
+        topParameters: [
+          { name: 'area_se', value: 0, influence: 'risk' },
+          { name: 'area_worst', value: 0, influence: 'risk' },
+          { name: 'concave points_se', value: 0, influence: 'protective' },
+          { name: 'perimeter_se', value: 0, influence: 'risk' },
+          { name: 'area_mean', value: 0, influence: 'protective' },
+          { name: 'radius_se', value: 0, influence: 'risk' },
+          { name: 'concave points_worst', value: 0, influence: 'risk' },
+          { name: 'concavity_se', value: 0, influence: 'protective' },
+          { name: 'concavity_worst', value: 0, influence: 'risk' },
+          { name: 'concave points_mean', value: 0, influence: 'risk' },
+        ],
         disclaimer: 'This AI analysis is for educational and screening assistance only. It does NOT replace a professional medical diagnosis.'
       };
     }

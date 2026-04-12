@@ -62,7 +62,7 @@ export default function RiskAnalysis() {
       const data = await analyzeImages(ccFile, mloFile);
       setResult(data);
       setTimeout(() => {
-        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 150);
     } catch (err) {
       setError(err.message || 'Analysis failed. Please try again.');
@@ -85,12 +85,18 @@ export default function RiskAnalysis() {
     return '#2e7d32';
   };
 
+  // Compute max value for scaling parameter bars
+  const getMaxParamValue = () => {
+    if (!result?.topParameters?.length) return 1;
+    return Math.max(...result.topParameters.map((p) => Math.abs(p.value)));
+  };
+
   return (
     <section className="section" id="predict">
       <h2 className="section__title">🔬 AI Risk Analysis</h2>
       <p className="section__subtitle">
         Upload <strong>CC</strong> (Cranio-Caudal) and <strong>MLO</strong> (Medio-Lateral Oblique)
-        mammogram views for comprehensive AI analysis powered by Google Gemini.
+        mammogram views for comprehensive analysis.
       </p>
 
       <div className="analysis">
@@ -183,13 +189,16 @@ export default function RiskAnalysis() {
         {loading && (
           <div className="loading-indicator">
             <div className="loading-spinner" />
-            <p className="loading-text">Analyzing mammograms with Gemini AI... please wait...</p>
+            <p className="loading-text">Analyzing mammograms... please wait...</p>
           </div>
         )}
 
-        {/* Results */}
+        {/* ═══════════════════════════════════════════
+            RESULTS — matches screenshot format
+            ═══════════════════════════════════════════ */}
         {result && (
           <div className="results-card" ref={resultRef}>
+            {/* Header: probability + risk badge */}
             <div className="results__header">
               <p className="results__probability-label">Cancer Probability</p>
               <div
@@ -204,49 +213,105 @@ export default function RiskAnalysis() {
               </span>
             </div>
 
-            {/* Analysis Basis */}
-            {result.analysisBasis && (
-              <div className="results__analysis">
-                <h4 className="results__analysis-title">📝 Analysis Summary</h4>
-                <p className="results__analysis-text">{result.analysisBasis}</p>
-                {result.biradsDensity && (
-                  <p className="results__analysis-text" style={{ marginTop: 8 }}>
-                    <strong>BI-RADS Density:</strong> {result.biradsDensity}
-                  </p>
-                )}
-                {result.areaOfConcern && result.areaOfConcern.location !== 'none' && (
-                  <p className="results__analysis-text" style={{ marginTop: 8 }}>
-                    <strong>Area of Concern:</strong> {result.areaOfConcern.description} ({result.areaOfConcern.location})
-                  </p>
-                )}
+            {/* ── Why this percentage was shown ── */}
+            {result.explanation && (
+              <div className="results__why-section">
+                <h4 className="results__why-title">Why this percentage was shown</h4>
+                <p className="results__why-text">{result.explanation}</p>
+
+                {/* Pills row */}
+                <div className="results__pills-row">
+                  {result.selectedCrop && (
+                    <span className="analysis-pill">
+                      Selected crop: <strong>{result.selectedCrop}</strong>
+                    </span>
+                  )}
+                  {result.focusArea && (
+                    <span className="analysis-pill">
+                      Focus area: <strong>{result.focusArea}</strong>
+                    </span>
+                  )}
+                </div>
               </div>
             )}
 
-            {/* Findings */}
-            {result.findings && result.findings.length > 0 && (
-              <div className="results__findings">
-                <h4 className="results__findings-title">🔍 Detailed Findings</h4>
-                {result.findings.map((f, i) => (
-                  <div key={i} className="results__finding-item">
-                    <span className="results__finding-bullet">•</span>
-                    <span>{f}</span>
+            {/* ── How each area scored ── */}
+            {result.areaScores && result.areaScores.length > 0 && (
+              <div className="results__area-scores">
+                <h4 className="results__area-scores-title">How each area scored</h4>
+                {result.areaScores.map((area, i) => (
+                  <div
+                    key={i}
+                    className={`area-score-row${area.isSelected ? ' area-score-row--selected' : ''}`}
+                  >
+                    <span className="area-score-row__name">{area.name}</span>
+                    <span className="area-score-row__value">{area.score.toFixed(2)}%</span>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Recommendations */}
-            {result.recommendations && result.recommendations.length > 0 && (
-              <div className="results__recommendations">
-                <h4 className="results__recommendations-title">💡 Recommendations</h4>
-                {result.recommendations.map((r, i) => (
-                  <div key={i} className="results__recommendation-item">
-                    <span>✓</span>
-                    <span>{r}</span>
-                  </div>
-                ))}
+            {/* ── Top 10 parameters (filled bars) ── */}
+            {result.topParameters && result.topParameters.length > 0 && (
+              <div className="results__top-params">
+                <h4 className="results__top-params-title">Top 10 parameters (filled bars)</h4>
+                {result.topParameters.map((param, i) => {
+                  const maxVal = getMaxParamValue();
+                  const barWidth = Math.max(5, (Math.abs(param.value) / maxVal) * 100);
+                  return (
+                    <div key={i} className="shap-row" style={{ animationDelay: `${i * 0.06}s` }}>
+                      <div className="shap-row-header">
+                        <span className="shap-feature">{param.name}</span>
+                        <span className="shap-value">
+                          {typeof param.value === 'number' ? param.value.toFixed(3) : param.value}
+                        </span>
+                      </div>
+                      <div className="shap-track">
+                        <div
+                          className={`shap-fill ${param.influence === 'protective' ? 'shap-fill-protect' : 'shap-fill-risk'}`}
+                          style={{ width: `${barWidth}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
+
+            {/* Explanation of parameters */}
+            <div className="results__params-legend">
+              <details className="params-legend-details">
+                <summary className="params-legend-summary">What The Parameters Indicate</summary>
+                <div className="params-legend-content">
+                  <p><strong>The model explanation uses 30 core parameters. They are built from 10 breast-tissue characteristics, each measured in 3 ways:</strong></p>
+                  <ul>
+                    <li><strong>Mean:</strong> Average value across sampled regions.</li>
+                    <li><strong>SE (Standard Error):</strong> Variation/instability of that feature across regions.</li>
+                    <li><strong>Worst:</strong> Highest (most extreme) observed value across regions.</li>
+                  </ul>
+                  <p><strong>The 10 Core Characteristics:</strong></p>
+                  <ul>
+                    <li><strong>radius:</strong> Approximate size of suspicious structures; larger values can indicate larger abnormal regions.</li>
+                    <li><strong>texture:</strong> Intensity variation/roughness in tissue; higher values can reflect heterogeneous tissue patterns.</li>
+                    <li><strong>perimeter:</strong> Boundary length of suspected regions; higher values can indicate more spread/irregular borders.</li>
+                    <li><strong>area:</strong> Pixel area of suspected regions; larger area can indicate larger lesion-like regions.</li>
+                    <li><strong>smoothness:</strong> How smooth or noisy the boundary/region is; lower smoothness can indicate irregular tissue patterns.</li>
+                    <li><strong>compactness:</strong> How dense and shape-compressed a region is; high compactness can reflect non-round abnormal shapes.</li>
+                    <li><strong>concavity:</strong> Degree of inward boundary curvature; higher concavity can indicate indented/irregular lesion contours.</li>
+                    <li><strong>concave points:</strong> Number/strength of inward boundary points; higher values can indicate complex malignant-like edges.</li>
+                    <li><strong>symmetry:</strong> Left-right structural balance of region appearance; lower symmetry can indicate abnormal morphology.</li>
+                    <li><strong>fractal_dimension:</strong> Edge complexity/roughness at multiple scales; higher values can indicate more complex boundaries.</li>
+                  </ul>
+                  <p><strong>How To Interpret The Bars:</strong></p>
+                  <ul>
+                    <li><strong>Longer bars</strong> = stronger influence on the current prediction.</li>
+                    <li><strong>Pink/Red bars</strong> = pushing prediction toward cancer risk.</li>
+                    <li><strong>Blue bars</strong> = pushing prediction away from cancer risk.</li>
+                  </ul>
+                  <p><em>These values are decision-support explanations and should not replace radiologist diagnosis.</em></p>
+                </div>
+              </details>
+            </div>
 
             {/* Disclaimer */}
             <div className="results__disclaimer">
