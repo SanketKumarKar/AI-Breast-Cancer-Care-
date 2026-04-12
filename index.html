@@ -17,10 +17,7 @@
       <p>Detection • Classification • Recurrence Prediction</p>
     </div>
   </header>
-  <!DOCTYPE html>
-  <html>
 
-  <head>
     <style>
       /* Chatbot Button */
       #chatBtn {
@@ -188,11 +185,6 @@
       }, 300);
 
     </script>
-
-  </body>
-
-  </html>
-
 
   <nav>
     <a href="#features">Our Features</a>
@@ -573,8 +565,8 @@
       formData.append('mlo', mloInput.files[0]);
 
       try {
-        // Use absolute URL for local development to support Live Server (port 5500) -> Backend (port 5000)
-        const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        // Use absolute URL for local development to support Live Server (port 5500) and direct file opening -> Backend (port 5000)
+        const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '')
           ? 'http://127.0.0.1:5000/predict'
           : '/predict'; // Relative path for production
 
