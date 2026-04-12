@@ -1,5 +1,26 @@
+# Model files
 best_model.keras
 weights_warmup.weights.h5
+mammo_classifier.keras
+
+# Python
 __pycache__/
 .venv/
+*.pyc
+
+# Node
+node_modules/
+dist/
+
+# Environment
+.env
+server/.env
+
+# IDE
 copilot*
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.dbv
