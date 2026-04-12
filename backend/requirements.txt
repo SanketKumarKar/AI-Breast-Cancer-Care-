@@ -7,3 +7,4 @@ pillow>=10.1.0
 gunicorn>=21.2.0
 scikit-learn
 
+tf-keras
