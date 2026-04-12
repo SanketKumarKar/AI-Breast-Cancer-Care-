@@ -6,6 +6,7 @@ import math
 EPS = 1e-7
 PI = math.pi
 
+@tf.keras.utils.register_keras_serializable(package="Custom")
 def cxcywh_to_xyxy(box):
     cx, cy, w, h = tf.split(box, 4, axis=-1)
     x1 = cx - w / 2
@@ -89,6 +90,7 @@ def cross_view_gate(cc, mlo):
     mlo = layers.Multiply()([mlo, gate])
     return cc, mlo
 
+@tf.keras.utils.register_keras_serializable(package="Custom")
 class ViewConsistencyLayer(layers.Layer):
     def __init__(self, weight=0.2, **kwargs):
         super().__init__(**kwargs)
@@ -170,6 +172,7 @@ def build_final_model():
 # However, usually for inference we can load with compile=False. 
 # But let's include them just in case or if we need to compile.
 
+@tf.keras.utils.register_keras_serializable(package="Custom")
 def biou(y_true, y_pred):
     b1 = cxcywh_to_xyxy(y_true)
     b2 = cxcywh_to_xyxy(y_pred)
@@ -235,6 +238,7 @@ def b_ciou(y_true, y_pred):
     ciou = iou - center_dist / enc_diag - alpha * v
     return ciou
 
+@tf.keras.utils.register_keras_serializable(package="Custom")
 class BBoxCIoULoss(tf.keras.losses.Loss):
     def __init__(self, l1_weight=1.0, ciou_weight=1.0, name="bbox_ciou_loss", **kwargs):
         super().__init__(name=name, **kwargs)

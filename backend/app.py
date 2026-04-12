@@ -544,6 +544,9 @@ def load_ai_model():
 
     # Always pass custom objects in case the model was renamed
     try:
+        import sys
+        sys.path.append(os.path.dirname(__file__))
+        
         from model_def import ViewConsistencyLayer, BBoxCIoULoss, biou, cxcywh_to_xyxy
         custom_objects = {
             "ViewConsistencyLayer": ViewConsistencyLayer,
@@ -551,7 +554,8 @@ def load_ai_model():
             "biou": biou,
             "cxcywh_to_xyxy": cxcywh_to_xyxy,
         }
-    except ImportError:
+    except Exception as e:
+        print(f"WARNING: Could not import custom objects from model_def: {e}")
         custom_objects = {}
 
     model = tf.keras.models.load_model(
