@@ -50,7 +50,7 @@ app.post('/api/analyze', upload.fields([
     }
 
     // gemini-2.5-flash: best multimodal model for image + text analysis
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.8-flash' });
 
     const ccImage = {
       inlineData: {
