@@ -213,6 +213,68 @@ export default function RiskAnalysis() {
               </span>
             </div>
 
+            {/* ── Cancer Type Classification ── */}
+            {result.cancerType && (
+              <div className="results__cancer-type">
+                <h4 className="results__section-title">🔬 Cancer Type Classification</h4>
+                <div className="cancer-type-card">
+                  <div className="cancer-type-name">{result.cancerType}</div>
+                  {result.typeConfidence !== undefined && (
+                    <div className="cancer-type-confidence">
+                      <span className="confidence-label">Confidence:</span>
+                      <div className="confidence-bar">
+                        <div
+                          className="confidence-fill"
+                          style={{
+                            width: `${result.typeConfidence}%`,
+                            backgroundColor: result.typeConfidence > 70 ? '#2e7d32' : result.typeConfidence > 40 ? '#ef6c00' : '#757575'
+                          }}
+                        />
+                      </div>
+                      <span className="confidence-value">{result.typeConfidence}%</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Recurrence Risk Graph ── */}
+            {result.recurrenceProbability !== undefined && (
+              <div className="results__recurrence">
+                <h4 className="results__section-title">📊 5-Year Recurrence Risk</h4>
+                <div className="recurrence-graph">
+                  <div className="recurrence-meter">
+                    <div
+                      className="recurrence-fill"
+                      style={{
+                        width: `${result.recurrenceProbability}%`,
+                        backgroundColor: result.recurrenceProbability > 50 ? '#c62828' : result.recurrenceProbability > 25 ? '#ef6c00' : '#2e7d32'
+                      }}
+                    >
+                      <span className="recurrence-percentage">{result.recurrenceProbability}%</span>
+                    </div>
+                  </div>
+                  <div className="recurrence-scale">
+                    <span>0%</span>
+                    <span>25%</span>
+                    <span>50%</span>
+                    <span>75%</span>
+                    <span>100%</span>
+                  </div>
+                </div>
+                {result.recurrenceFactors && result.recurrenceFactors.length > 0 && (
+                  <div className="recurrence-factors">
+                    <p className="recurrence-factors-title">Key Factors:</p>
+                    <ul className="recurrence-factors-list">
+                      {result.recurrenceFactors.map((factor, i) => (
+                        <li key={i}>{factor}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ── Why this percentage was shown ── */}
             {result.explanation && (
               <div className="results__why-section">

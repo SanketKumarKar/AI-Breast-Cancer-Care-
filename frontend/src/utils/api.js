@@ -1,5 +1,5 @@
 const API_BASE = 'https://ai-breast-cancer-care-backend.vercel.app/api';
-//base api
+
 /**
  * Analyze mammogram images via Gemini API
  * @param {File} ccFile - CC view image

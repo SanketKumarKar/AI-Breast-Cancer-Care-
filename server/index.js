@@ -31,6 +31,50 @@ async function withRetry(fn, retries = 2) {
   }
 }
 
+// ── Helper functions for recurrence analysis ──
+function calculateRecurrenceProbability(probability, riskLevel, topParameters) {
+  let baseProb = 10;
+  if (riskLevel === 'High Risk') {
+    baseProb = Math.min(60, probability);
+  } else if (riskLevel === 'Moderate Risk') {
+    baseProb = Math.min(30, probability);
+  } else {
+    baseProb = Math.min(15, probability);
+  }
+
+  const riskParameters = topParameters.filter(p => p.influence === 'risk').length;
+  const protectiveParameters = topParameters.filter(p => p.influence === 'protective').length;
+
+  const riskFactor = Math.min(0.5, riskParameters * 0.05);
+  const protectiveFactor = Math.min(0.3, protectiveParameters * 0.03);
+
+  return Math.round(Math.max(0, Math.min(100, baseProb + riskFactor - protectiveFactor)));
+}
+
+function identifyRecurrenceFactors(riskLevel, topParameters, selectedCrop) {
+  const factors = [];
+
+  if (riskLevel === 'High Risk') factors.push('High cancer risk level detected');
+  else if (riskLevel === 'Moderate Risk') factors.push('Moderate cancer risk level');
+  else factors.push('Low cancer risk level');
+
+  const riskParameters = topParameters.filter(p => p.influence === 'risk');
+  const protectiveParameters = topParameters.filter(p => p.influence === 'protective');
+
+  if (riskParameters.length > 5) factors.push('Multiple risk parameters present');
+  if (protectiveParameters.length > 3) factors.push('Several protective factors detected');
+
+  if (selectedCrop && selectedCrop.includes('CC')) factors.push('CC view analysis');
+  else if (selectedCrop && selectedCrop.includes('MLO')) factors.push('MLO view analysis');
+
+  if (factors.length < 2) {
+    factors.push('Standard screening recommended');
+    if (factors.length < 3) factors.push('Regular follow-up monitoring');
+  }
+
+  return factors.slice(0, 3);
+}
+
 // ── Health check ──
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -49,7 +93,6 @@ app.post('/api/analyze', upload.fields([
       return res.status(400).json({ error: 'Please upload both CC and MLO view images.' });
     }
 
-    // gemini-2.5-flash: best multimodal model for image + text analysis
     const model = genAI.getGenerativeModel({ model: 'gemini-3.8-flash' });
 
     const ccImage = {
@@ -66,76 +109,86 @@ app.post('/api/analyze', upload.fields([
       }
     };
 
-    const prompt = `You are an expert radiologist AI assistant specialized in mammogram analysis. You are analyzing two mammogram views of the same breast:
+    const prompt = `You are an expert radiologist AI assistant specialized in mammogram analysis. Analyze two mammogram views:
+1. CC (Cranio-Caudal) view - top-down
+2. MLO (Medio-Lateral Oblique) view - angled side
 
-1. The first image is the CC (Cranio-Caudal) view - top-down view
-2. The second image is the MLO (Medio-Lateral Oblique) view - angled side view
+Look for: tissue density, masses, calcifications, asymmetries, skin thickening, lymph nodes, breast composition.
 
-Analyze both images carefully. Look for:
-- Tissue density patterns and BI-RADS density category
-- Any masses, nodules, or architectural distortions
-- Calcifications (microcalcifications or macrocalcifications)
-- Asymmetric densities between views
-- Skin thickening or retraction
-- Lymph node abnormalities
-- Overall breast composition
-
-IMPORTANT: You MUST respond with ONLY valid JSON, no markdown, no code fences. Use this exact structure:
+RESPOND WITH ONLY VALID JSON (no markdown):
 {
-  "probability": <number between 0 and 100 representing cancer risk percentage>,
-  "riskLevel": "<Low Risk | Moderate Risk | High Risk>",
-  "prediction": "<Cancer Signal Detected | No Strong Cancer Signal>",
-  "explanation": "<A detailed 2-4 sentence explanation of WHY this percentage was given. Mention which scan had the strongest warning signs, which area was selected and why, and the key data points like: Selected view, Best area, Selected area score, CC full-image score, MLO full-image score, SHAP-style tabular score.>",
-  "selectedCrop": "<CC | MLO> - <area name, e.g. bottom-left area>",
+  "probability": <0-100>,
+  "riskLevel": "<Low Risk|Moderate Risk|High Risk>",
+  "cancerType": "<DCIS|IDC|ILC|Tubular|Medullary|Metaplastic|LCIS|No Suspicious Cancer Type Detected|Unable to Determine>",
+  "typeConfidence": <0-100>,
+  "recurrenceProbability": <0-100>,
+  "recurrenceFactors": ["Factor 1", "Factor 2", "Factor 3"],
+  "prediction": "<Cancer Signal Detected|No Strong Cancer Signal>",
+  "explanation": "<2-4 sentence explanation>",
+  "selectedCrop": "<CC|MLO> - <area>",
   "focusArea": "center <x>%, <y>%, box <w>% × <h>%",
   "areaScores": [
-    { "name": "top-left area", "score": <number 0-100>, "isSelected": false },
-    { "name": "top-right area", "score": <number 0-100>, "isSelected": false },
-    { "name": "bottom-left area", "score": <number 0-100>, "isSelected": true },
-    { "name": "bottom-right area", "score": <number 0-100>, "isSelected": false },
-    { "name": "center area", "score": <number 0-100>, "isSelected": false }
+    {"name": "top-left area", "score": <0-100>, "isSelected": false},
+    {"name": "top-right area", "score": <0-100>, "isSelected": false},
+    {"name": "bottom-left area", "score": <0-100>, "isSelected": false},
+    {"name": "bottom-right area", "score": <0-100>, "isSelected": false},
+    {"name": "center area", "score": <0-100>, "isSelected": false}
   ],
   "topParameters": [
-    { "name": "<param_name>", "value": <number>, "influence": "<risk | protective>" },
-    ... 9 more parameters
+    {"name": "<param>", "value": <number>, "influence": "<risk|protective>"},
+    ...9 more parameters
   ],
-  "disclaimer": "This AI analysis is for educational and screening assistance only. It does NOT replace a professional medical diagnosis. Please consult a qualified healthcare provider."
+  "disclaimer": "This AI analysis is for educational and screening assistance only. It does NOT replace professional medical diagnosis."
 }
 
-Rules for the response:
-- "areaScores" must have exactly 5 entries (top-left, top-right, bottom-left, bottom-right, center). Mark the one with the highest score as "isSelected": true.
-- "topParameters" MUST contain EXACTLY 10 entries chosen from the following 30 breast-tissue characteristics from the Breast Cancer Wisconsin Diagnostic dataset:
-  radius_mean, radius_se, radius_worst
-  texture_mean, texture_se, texture_worst
-  perimeter_mean, perimeter_se, perimeter_worst
-  area_mean, area_se, area_worst
-  smoothness_mean, smoothness_se, smoothness_worst
-  compactness_mean, compactness_se, compactness_worst
-  concavity_mean, concavity_se, concavity_worst
-  concave points_mean, concave points_se, concave points_worst
-  symmetry_mean, symmetry_se, symmetry_worst
-  fractal_dimension_mean, fractal_dimension_se, fractal_dimension_worst
-- The "influence" field in "topParameters" must be either "risk" (pushing prediction toward cancer risk) or "protective" (pushing prediction away from cancer risk).
-- The "explanation" should read like: "The AI checked both scans and found the strongest warning signs in the CC image, mainly in the bottom-left area. The AI checked 5 areas and picked the bottom-left area because it had the highest score (56.10%). The next highest was the top-left area (55.87%), so the selected area was ahead by 0.23%. Key data: Selected view: CC | Best area: Bottom-Left | Selected area score: 56.10% | CC full-image score: 54.60% | MLO full-image score: 54.80% | SHAP-style tabular score: 100.00%"
-- probability: 0-20% = normal, 20-40% = likely benign, 40-60% = indeterminate, 60-80% = suspicious, 80-100% = highly suspicious
-- Be thorough but conservative. When in doubt, recommend follow-up rather than alarming the patient.`;
+Rules:
+- areaScores: exactly 5 entries, mark highest as isSelected: true
+- topParameters: exactly 10 from: radius_mean/se/worst, texture_mean/se/worst, perimeter_mean/se/worst, area_mean/se/worst, smoothness_mean/se/worst, compactness_mean/se/worst, concavity_mean/se/worst, concave points_mean/se/worst, symmetry_mean/se/worst, fractal_dimension_mean/se/worst
+- influence: either "risk" or "protective"
+- probability: 0-20%=normal, 20-40%=likely benign, 40-60%=indeterminate, 60-80%=suspicious, 80-100%=highly suspicious
+- Cancer Type: DCIS=microcalcifications; IDC=spiculated mass; ILC=linear patterns; Tubular=tubular structures; Medullary=central necrosis; Metaplastic=mixed features; LCIS=linear lesions
+- typeConfidence: 0-30 if no cancer, higher if suspicious
+- recurrenceProbability: 5-year estimate based on characteristics
+- Be conservative, recommend follow-up when uncertain`;
 
     const result = await withRetry(() => model.generateContent([prompt, ccImage, mloImage]));
     const responseText = result.response.text();
 
-    // Parse the JSON response from Gemini
     let analysisResult;
     try {
-      // Strip code fences if Gemini wraps it
       const cleanJson = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       analysisResult = JSON.parse(cleanJson);
+
+      if (analysisResult.probability === undefined || analysisResult.riskLevel === undefined) {
+        throw new Error('Invalid response structure');
+      }
+
+      // Add computed recurrence data if not present
+      if (!analysisResult.recurrenceProbability) {
+        analysisResult.recurrenceProbability = calculateRecurrenceProbability(
+          analysisResult.probability,
+          analysisResult.riskLevel,
+          analysisResult.topParameters || []
+        );
+      }
+      if (!analysisResult.recurrenceFactors) {
+        analysisResult.recurrenceFactors = identifyRecurrenceFactors(
+          analysisResult.riskLevel,
+          analysisResult.topParameters || [],
+          analysisResult.selectedCrop
+        );
+      }
     } catch (parseError) {
       console.error('Failed to parse Gemini response:', responseText);
       analysisResult = {
         probability: 15,
         riskLevel: 'Low Risk',
+        cancerType: 'No Suspicious Cancer Type Detected',
+        typeConfidence: 0,
+        recurrenceProbability: 5,
+        recurrenceFactors: ['Regular screening recommended'],
         prediction: 'Analysis Inconclusive',
-        explanation: 'The AI was unable to produce a structured analysis. The images may not be standard mammograms or may be unclear. Please try uploading clearer images.',
+        explanation: 'Unable to produce structured analysis. Please try uploading clearer images.',
         selectedCrop: 'CC - center area',
         focusArea: 'center 50.0%, 50.0%, box 50.0% × 50.0%',
         areaScores: [
@@ -157,7 +210,7 @@ Rules for the response:
           { name: 'concavity_worst', value: 0, influence: 'risk' },
           { name: 'concave points_mean', value: 0, influence: 'risk' },
         ],
-        disclaimer: 'This AI analysis is for educational and screening assistance only. It does NOT replace a professional medical diagnosis.'
+        disclaimer: 'This AI analysis is for educational purposes only and does NOT replace professional medical diagnosis.'
       };
     }
 
@@ -177,11 +230,9 @@ app.post('/api/chat', async (req, res) => {
       return res.status(400).json({ error: 'Message is required.' });
     }
 
-    // gemini-2.5-flash: reliable model for chat
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.8-flash' });
 
     const systemPrompt = `You are a compassionate and knowledgeable breast cancer awareness assistant called "BCA Care Bot". Your role is to:
-
 1. Provide accurate, evidence-based information about breast cancer
 2. Help users understand breast cancer types, symptoms, risk factors, and prevention
 3. Encourage regular screening and early detection
@@ -195,9 +246,8 @@ IMPORTANT RULES:
 - Be empathetic and supportive in tone
 - Keep responses concise (2-4 paragraphs max)
 - Use simple, accessible language
-- If asked about the app, explain you help with breast cancer awareness and work alongside the AI mammogram analysis tool`;
+- If asked about the app, explain you help with breast cancer awareness`;
 
-    // Build chat history
     const chatHistory = history.map(msg => ({
       role: msg.role === 'user' ? 'user' : 'model',
       parts: [{ text: msg.content }]
@@ -224,4 +274,4 @@ IMPORTANT RULES:
 app.listen(PORT, () => {
   console.log(`🩺 AI Breast Cancer Care server running on http://localhost:${PORT}`);
   console.log(`   Health check: http://localhost:${PORT}/api/health`);
-});
+}); 
